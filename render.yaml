@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: ai-code-reviewer-backend
+    env: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: GROK_API_KEY
+        sync: false
+      - key: GROK_MODEL
+        value: grok-3

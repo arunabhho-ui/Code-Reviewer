@@ -1,0 +1,155 @@
+{
+  "timestamp": "2026-09-05T18:04:34Z",
+  "total_benchmarks": 8,
+  "baseline_reproduction_rate_pct": 100.0,
+  "fix_success_rate_pct": 100.0,
+  "avg_attempts_to_fix": 1.0,
+  "avg_duration_ms": 2830.07,
+  "total_cost_usd": 0.0633,
+  "benchmarks": [
+    {
+      "id": "PY-01",
+      "name": "Zero Division on Empty Input",
+      "language": "python",
+      "category": "logic_bug",
+      "baseline_bug_reproduced": true,
+      "ground_truth_verified": true,
+      "fix_verified_in_sandbox": true,
+      "attempts": 1,
+      "duration_ms": 4034.44,
+      "tokens": {
+        "input_tokens": 646,
+        "output_tokens": 295,
+        "total_tokens": 941,
+        "cost_usd": 0.00636
+      },
+      "sandbox_duration_ms": 473.76
+    },
+    {
+      "id": "PY-02",
+      "name": "Mutable Default Argument State Leak",
+      "language": "python",
+      "category": "state_leak",
+      "baseline_bug_reproduced": true,
+      "ground_truth_verified": true,
+      "fix_verified_in_sandbox": true,
+      "attempts": 1,
+      "duration_ms": 3418.06,
+      "tokens": {
+        "input_tokens": 667,
+        "output_tokens": 327,
+        "total_tokens": 994,
+        "cost_usd": 0.00691
+      },
+      "sandbox_duration_ms": 483.22
+    },
+    {
+      "id": "PY-03",
+      "name": "Off-by-One Loop Bounds IndexError",
+      "language": "python",
+      "category": "off_by_one",
+      "baseline_bug_reproduced": true,
+      "ground_truth_verified": true,
+      "fix_verified_in_sandbox": true,
+      "attempts": 1,
+      "duration_ms": 3333.71,
+      "tokens": {
+        "input_tokens": 851,
+        "output_tokens": 354,
+        "total_tokens": 1205,
+        "cost_usd": 0.00786
+      },
+      "sandbox_duration_ms": 472.56
+    },
+    {
+      "id": "PY-04",
+      "name": "Unclosed Resource and Missing Key Crash",
+      "language": "python",
+      "category": "resource_leak",
+      "baseline_bug_reproduced": true,
+      "ground_truth_verified": true,
+      "fix_verified_in_sandbox": true,
+      "attempts": 1,
+      "duration_ms": 3680.24,
+      "tokens": {
+        "input_tokens": 629,
+        "output_tokens": 409,
+        "total_tokens": 1038,
+        "cost_usd": 0.00802
+      },
+      "sandbox_duration_ms": 503.38
+    },
+    {
+      "id": "JS-01",
+      "name": "JavaScript Array Bounds Off-by-One",
+      "language": "javascript",
+      "category": "off_by_one",
+      "baseline_bug_reproduced": true,
+      "ground_truth_verified": true,
+      "fix_verified_in_sandbox": true,
+      "attempts": 1,
+      "duration_ms": 1724.8,
+      "tokens": {
+        "input_tokens": 933,
+        "output_tokens": 242,
+        "total_tokens": 1175,
+        "cost_usd": 0.00643
+      },
+      "sandbox_duration_ms": 119.84
+    },
+    {
+      "id": "JS-02",
+      "name": "Prototype Pollution in Object Merge",
+      "language": "javascript",
+      "category": "security_flaw",
+      "baseline_bug_reproduced": true,
+      "ground_truth_verified": true,
+      "fix_verified_in_sandbox": true,
+      "attempts": 1,
+      "duration_ms": 2423.38,
+      "tokens": {
+        "input_tokens": 807,
+        "output_tokens": 594,
+        "total_tokens": 1401,
+        "cost_usd": 0.01133
+      },
+      "sandbox_duration_ms": 118.37
+    },
+    {
+      "id": "JS-03",
+      "name": "Unhandled Async Exception & Default Fallback",
+      "language": "javascript",
+      "category": "error_handling",
+      "baseline_bug_reproduced": true,
+      "ground_truth_verified": true,
+      "fix_verified_in_sandbox": true,
+      "attempts": 1,
+      "duration_ms": 1817.09,
+      "tokens": {
+        "input_tokens": 742,
+        "output_tokens": 278,
+        "total_tokens": 1020,
+        "cost_usd": 0.0064
+      },
+      "sandbox_duration_ms": 117.91
+    },
+    {
+      "id": "JS-04",
+      "name": "Event Listener Memory Leak Cleanup",
+      "language": "javascript",
+      "category": "concurrency_leak",
+      "baseline_bug_reproduced": true,
+      "ground_truth_verified": true,
+      "fix_verified_in_sandbox": true,
+      "attempts": 1,
+      "duration_ms": 2208.84,
+      "tokens": {
+        "input_tokens": 835,
+        "output_tokens": 497,
+        "total_tokens": 1332,
+        "cost_usd": 0.00996
+      },
+      "sandbox_duration_ms": 114.47
+    }
+  ]
+}

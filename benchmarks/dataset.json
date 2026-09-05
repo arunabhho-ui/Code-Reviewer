@@ -1,0 +1,82 @@
+[
+  {
+    "id": "PY-01",
+    "name": "Zero Division on Empty Input",
+    "language": "python",
+    "category": "logic_bug",
+    "description": "Function crashes with ZeroDivisionError when called with an empty list.",
+    "buggy_code": "def calculate_mean(numbers: list) -> float:\n    total = sum(numbers)\n    # Bug: Division by zero when numbers is empty\n    return total / len(numbers)\n",
+    "test_code": "from solution import calculate_mean\n\ndef test_regular_numbers():\n    assert calculate_mean([10, 20, 30]) == 20.0\n\ndef test_single_number():\n    assert calculate_mean([5]) == 5.0\n\ndef test_empty_list():\n    assert calculate_mean([]) == 0.0\n",
+    "ground_truth_fixed_code": "def calculate_mean(numbers: list) -> float:\n    if not numbers:\n        return 0.0\n    return sum(numbers) / len(numbers)\n"
+  },
+  {
+    "id": "PY-02",
+    "name": "Mutable Default Argument State Leak",
+    "language": "python",
+    "category": "state_leak",
+    "description": "Default argument items=[] retains mutated state across separate function invocations.",
+    "buggy_code": "def append_timestamp(event_name: str, events: list = []) -> list:\n    # Bug: Mutable default argument retains state across calls\n    events.append(event_name)\n    return events\n",
+    "test_code": "from solution import append_timestamp\n\ndef test_first_call():\n    res1 = append_timestamp(\"login\")\n    assert res1 == [\"login\"]\n\ndef test_second_call_isolated():\n    res2 = append_timestamp(\"logout\")\n    assert res2 == [\"logout\"]\n",
+    "ground_truth_fixed_code": "def append_timestamp(event_name: str, events: list = None) -> list:\n    if events is None:\n        events = []\n    events.append(event_name)\n    return events\n"
+  },
+  {
+    "id": "PY-03",
+    "name": "Off-by-One Loop Bounds IndexError",
+    "language": "python",
+    "category": "off_by_one",
+    "description": "Loop iterates to len(items) + 1 resulting in an IndexError on the final iteration.",
+    "buggy_code": "def compute_running_differences(values: list) -> list:\n    if len(values) < 2:\n        return []\n    diffs = []\n    for i in range(len(values)):\n        diff = values[i + 1] - values[i]\n        diffs.append(diff)\n    return diffs\n",
+    "test_code": "from solution import compute_running_differences\n\ndef test_simple_series():\n    assert compute_running_differences([1, 4, 9, 16]) == [3, 5, 7]\n\ndef test_two_elements():\n    assert compute_running_differences([10, 25]) == [15]\n\ndef test_single_element():\n    assert compute_running_differences([42]) == []\n",
+    "ground_truth_fixed_code": "def compute_running_differences(values: list) -> list:\n    if len(values) < 2:\n        return []\n    diffs = []\n    for i in range(len(values) - 1):\n        diff = values[i + 1] - values[i]\n        diffs.append(diff)\n    return diffs\n"
+  },
+  {
+    "id": "PY-04",
+    "name": "Unclosed Resource and Missing Key Crash",
+    "language": "python",
+    "category": "resource_leak",
+    "description": "Function accesses dictionary key directly without default and leaks open file handles.",
+    "buggy_code": "def parse_user_config(config_dict: dict, key: str) -> str:\n    val = config_dict[key]\n    return val.strip().lower()\n",
+    "test_code": "from solution import parse_user_config\n\ndef test_existing_key():\n    assert parse_user_config({\"theme\": \"  DARK \"}, \"theme\") == \"dark\"\n\ndef test_missing_key():\n    assert parse_user_config({}, \"missing_key\") == \"\"\n",
+    "ground_truth_fixed_code": "def parse_user_config(config_dict: dict, key: str) -> str:\n    val = config_dict.get(key, \"\")\n    if not isinstance(val, str):\n        return \"\"\n    return val.strip().lower()\n"
+  },
+  {
+    "id": "JS-01",
+    "name": "JavaScript Array Bounds Off-by-One",
+    "language": "javascript",
+    "category": "off_by_one",
+    "description": "Loop condition i <= arr.length accesses out-of-bounds element producing NaN.",
+    "buggy_code": "function calculateSum(numbers) {\n    let sum = 0;\n    for (let i = 0; i <= numbers.length; i++) {\n        sum += numbers[i];\n    }\n    return sum;\n}\n\nmodule.exports = { calculateSum };\n",
+    "test_code": "const test = require('node:test');\nconst assert = require('node:assert');\nconst { calculateSum } = require('./solution');\n\ntest('calculates correct array sum', () => {\n    assert.strictEqual(calculateSum([1, 2, 3, 4]), 10);\n});\n\ntest('handles empty array', () => {\n    assert.strictEqual(calculateSum([]), 0);\n});\n",
+    "ground_truth_fixed_code": "function calculateSum(numbers) {\n    let sum = 0;\n    for (let i = 0; i < numbers.length; i++) {\n        sum += numbers[i];\n    }\n    return sum;\n}\n\nmodule.exports = { calculateSum };\n"
+  },
+  {
+    "id": "JS-02",
+    "name": "Prototype Pollution in Object Merge",
+    "language": "javascript",
+    "category": "security_flaw",
+    "description": "Recursive merge without checking dangerous __proto__ and constructor keys.",
+    "buggy_code": "function safeMerge(target, source) {\n    for (let key in source) {\n        if (typeof source[key] === 'object' && source[key] !== null) {\n            if (!target[key]) target[key] = {};\n            safeMerge(target[key], source[key]);\n        } else {\n            target[key] = source[key];\n        }\n    }\n    return target;\n}\n\nmodule.exports = { safeMerge };\n",
+    "test_code": "const test = require('node:test');\nconst assert = require('node:assert');\nconst { safeMerge } = require('./solution');\n\ntest('merges standard objects correctly', () => {\n    const res = safeMerge({ a: 1 }, { b: 2 });\n    assert.strictEqual(res.a, 1);\n    assert.strictEqual(res.b, 2);\n});\n\ntest('blocks prototype pollution payload', () => {\n    const payload = JSON.parse('{\"__proto__\": {\"polluted\": \"yes\"}}');\n    safeMerge({}, payload);\n    assert.strictEqual(({}).polluted, undefined);\n});\n",
+    "ground_truth_fixed_code": "function safeMerge(target, source) {\n    for (let key in source) {\n        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {\n            continue;\n        }\n        if (typeof source[key] === 'object' && source[key] !== null) {\n            if (!target[key]) target[key] = {};\n            safeMerge(target[key], source[key]);\n        } else {\n            target[key] = source[key];\n        }\n    }\n    return target;\n}\n\nmodule.exports = { safeMerge };\n"
+  },
+  {
+    "id": "JS-03",
+    "name": "Unhandled Async Exception & Default Fallback",
+    "language": "javascript",
+    "category": "error_handling",
+    "description": "Async parsing function throws unhandled exception on malformed JSON.",
+    "buggy_code": "async function parsePayloadAsync(jsonString) {\n    const parsed = JSON.parse(jsonString);\n    return parsed.data;\n}\n\nmodule.exports = { parsePayloadAsync };\n",
+    "test_code": "const test = require('node:test');\nconst assert = require('node:assert');\nconst { parsePayloadAsync } = require('./solution');\n\ntest('parses valid JSON string', async () => {\n    const res = await parsePayloadAsync('{\"data\": \"success\"}');\n    assert.strictEqual(res, 'success');\n});\n\ntest('gracefully handles invalid JSON by returning null', async () => {\n    const res = await parsePayloadAsync('{malformed: json');\n    assert.strictEqual(res, null);\n});\n",
+    "ground_truth_fixed_code": "async function parsePayloadAsync(jsonString) {\n    try {\n        const parsed = JSON.parse(jsonString);\n        return parsed && parsed.data !== undefined ? parsed.data : null;\n    } catch (e) {\n        return null;\n    }\n}\n\nmodule.exports = { parsePayloadAsync };\n"
+  },
+  {
+    "id": "JS-04",
+    "name": "Event Listener Memory Leak Cleanup",
+    "language": "javascript",
+    "category": "concurrency_leak",
+    "description": "Event subscriber class attaches listener but lacks unsubscribe method causing memory retention.",
+    "buggy_code": "class EventWatcher {\n    constructor(emitter) {\n        this.emitter = emitter;\n        this.count = 0;\n        this.handler = () => { this.count++; };\n        this.emitter.on('event', this.handler);\n    }\n\n    getCount() {\n        return this.count;\n    }\n}\n\nmodule.exports = { EventWatcher };\n",
+    "test_code": "const test = require('node:test');\nconst assert = require('node:assert');\nconst EventEmitter = require('events');\nconst { EventWatcher } = require('./solution');\n\ntest('tracks event count correctly', () => {\n    const emitter = new EventEmitter();\n    const watcher = new EventWatcher(emitter);\n    emitter.emit('event');\n    assert.strictEqual(watcher.getCount(), 1);\n});\n\ntest('provides dispose method that removes listener', () => {\n    const emitter = new EventEmitter();\n    const watcher = new EventWatcher(emitter);\n    assert.strictEqual(emitter.listenerCount('event'), 1);\n    assert.strictEqual(typeof watcher.dispose, 'function');\n    watcher.dispose();\n    assert.strictEqual(emitter.listenerCount('event'), 0);\n});\n",
+    "ground_truth_fixed_code": "class EventWatcher {\n    constructor(emitter) {\n        this.emitter = emitter;\n        this.count = 0;\n        this.handler = () => { this.count++; };\n        this.emitter.on('event', this.handler);\n    }\n\n    getCount() {\n        return this.count;\n    }\n\n    dispose() {\n        if (this.emitter && this.handler) {\n            this.emitter.removeListener('event', this.handler);\n        }\n    }\n}\n\nmodule.exports = { EventWatcher };\n"
+  }
+]

@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+build/
+.npm/
+
+# Chroma
+chroma_db/
+.chroma/
+
+# Sandbox / Scratch
+temp_sandboxes/
+scratch/
+*.log
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
