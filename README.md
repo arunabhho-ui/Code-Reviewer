@@ -249,7 +249,7 @@ npm run build
 ## Deployment
 
 - **Docker Compose:** complete local deployment; recommended when C and Java Docker sandboxes are needed.
-- **Render:** configured by [`render.yaml`](render.yaml); add `GROQ_API_KEY` and restrict CORS before public deployment.
+- **Render:** configured by [`render.yaml`](render.yaml) to use `backend/Dockerfile` with the repository root as build context. The image includes Python, GCC, the JDK, and Node 22; Render runs the local subprocess sandbox because hosted services do not expose a Docker daemon. Add `GROQ_API_KEY` and restrict CORS before public deployment.
 - **Fly.io:** configured by [`fly.toml`](fly.toml); use `fly secrets set GROQ_API_KEY=...` rather than storing secrets in the file.
 - **Vercel:** configured by [`vercel.json`](vercel.json) for the Vite frontend; set `VITE_API_URL` when the backend is hosted elsewhere.
 
