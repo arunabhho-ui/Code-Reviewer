@@ -6,9 +6,22 @@ AI Code Reviewer is a FastAPI and React/Vite application for source review, secu
 
 - **Single-File Review:** deterministic static analysis followed by structured LLM findings and corrected source.
 - **Sandbox Fix Agent:** generates or accepts tests, runs the baseline, proposes complete-file patches, retries repairs, and streams progress over SSE.
-- **GitHub PR Mode:** inspects repositories and pull requests, fetches files, reviews them, and opens a pull request only for a sandbox-verified patch.
+- **GitHub PR Mode:** inspects repositories and pull requests, discovers reviewable Python, JavaScript, TypeScript, C, and Java files, fetches selected files, reviews them with a dedicated security pass, and opens a pull request only for a sandbox-verified patch.
 - **Whole-Repo RAG:** indexes Python, JavaScript, and TypeScript symbols in ChromaDB and retrieves related cross-file context for review.
 - **Benchmarks:** runs eight curated Python and JavaScript repair cases with baseline, ground-truth, and autonomous-agent results.
+
+### Current frontend capabilities
+
+- Select Python, JavaScript, TypeScript, C, or Java source.
+- Load built-in buggy samples, upload a local source file, edit code directly, set the filename, or clear the editor.
+- Toggle the deterministic pre-pass static linter before a review.
+- Browse findings by category and severity, expand finding details, copy suggested fixes, and inspect the complete repaired file or diff.
+- Send a finding directly to the Sandbox Fix Agent.
+- Inspect a GitHub repository, branch, or pull request; search and select reviewable files; and automatically review the selected file with a dedicated security pass.
+- Filter GitHub and RAG findings between general and security results, then send verified fixes to the GitHub PR workflow.
+- Index repository files, select a target file, retrieve cross-file context, and run a context-aware review.
+- Run one benchmark or the full suite, inspect buggy source, tests, fixed source, and diffs, and view sandbox success metrics.
+- Stream agent logs, attempt history, test output, patch diffs, token usage, and verification results in the UI.
 
 ## Architecture
 
@@ -206,7 +219,7 @@ Autonomous repair accepts `max_retries` from 1 through 5, with a default of 3. T
 | `GROQ_BASE_URL` | Groq OpenAI-compatible URL | Provider endpoint. |
 | `GROK_API_KEY` | empty | Legacy xAI-compatible credential fallback. |
 | `GROK_MODEL` | `grok-3` | Legacy xAI-compatible model setting. |
-| `GITHUB_TOKEN` | empty | Optional server-side GitHub credential. |
+| `GITHUB_TOKEN` | empty | Optional server-side GitHub credential; the UI also accepts a per-session GitHub token for GitHub workflows. |
 | `SANDBOX_TIMEOUT_SECONDS` | `10` | Execution timeout. |
 | `SANDBOX_MEMORY_LIMIT` | `512m` | Docker memory limit. |
 | `USE_DOCKER_SANDBOX` | `true` | Prefer cached Docker sandbox images. |
