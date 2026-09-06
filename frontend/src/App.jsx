@@ -1,25 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
-  Activity, 
-  CheckCircle2, 
-  AlertCircle, 
-  RefreshCw, 
   Code2, 
   Bot, 
   GitPullRequest, 
   Database, 
-  ShieldCheck, 
-  Key,
-  Layers,
-  Sparkles
+  ShieldCheck
 } from 'lucide-react';
-import { checkHealth } from './services/api';
 import SingleFileReview from './components/SingleFileReview';
 import AgentLoopView from './components/AgentLoopView';
 import GitHubReviewView from './components/GitHubReviewView';
 import WholeRepoRAGView from './components/WholeRepoRAGView';
 import BenchmarkView from './components/BenchmarkView';
-import ApiConfigModal from './components/ApiConfigModal';
 
 const VALID_GROQ_MODELS = ['openai/gpt-oss-120b', 'llama-3.1-8b-instant', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768'];
 const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
@@ -32,37 +23,14 @@ const getSafeGroqModel = () => {
 };
 
 export default function App() {
-  const [healthData, setHealthData] = useState(null);
-  const [loadingHealth, setLoadingHealth] = useState(true);
-  const [healthError, setHealthError] = useState(null);
   const [activeTab, setActiveTab] = useState('single-file');
 
   // LLM Config state from localStorage
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('groq_api_key') || '');
   const [model, setModel] = useState(() => getSafeGroqModel());
-  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
 
   // Cross-tab transfer payload for Phase 2 Agent Loop
   const [agentPayload, setAgentPayload] = useState(null);
-
-  const fetchHealth = async () => {
-    setLoadingHealth(true);
-    const result = await checkHealth();
-    if (result.success) {
-      setHealthData(result.data);
-      setHealthError(null);
-    } else {
-      setHealthError(result.error);
-      setHealthData(null);
-    }
-    setLoadingHealth(false);
-  };
-
-  useEffect(() => {
-    fetchHealth();
-    const interval = setInterval(fetchHealth, 15000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleNavigateToAgent = (payload) => {
     setAgentPayload(payload);
@@ -89,36 +57,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Action Items */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* LLM Key / Model Config Button */}
-            <button
-              onClick={() => setIsConfigModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 border border-slate-700 text-xs text-slate-300 hover:text-white transition"
-              title="Configure Groq API Key"
-            >
-              <Key className="w-3.5 h-3.5 text-sky-400" />
-              <span className="hidden sm:inline">API Config</span>
-              {apiKey && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
-            </button>
-
-            {/* Health Status Indicator */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/90 border border-slate-700 text-xs">
-              <div className={`w-2 h-2 rounded-full ${healthData ? 'bg-emerald-400 animate-pulse' : healthError ? 'bg-rose-500' : 'bg-amber-400'}`} />
-              <span className="text-slate-300 font-medium hidden sm:inline">
-                {healthData ? 'Backend Live' : 'Backend Offline'}
-              </span>
-            </div>
-
-            <button
-              onClick={fetchHealth}
-              disabled={loadingHealth}
-              className="p-1.5 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-755 border border-slate-700 rounded-lg transition disabled:opacity-50"
-              title="Refresh Health"
-            >
-              <RefreshCw className={`w-4 h-4 ${loadingHealth ? 'animate-spin text-sky-400' : ''}`} />
-            </button>
-          </div>
         </div>
       </header>
 
@@ -195,16 +133,6 @@ export default function App() {
           />
         )}
       </main>
-
-      {/* API Config Modal */}
-      <ApiConfigModal
-        isOpen={isConfigModalOpen}
-        onClose={() => setIsConfigModalOpen(false)}
-        apiKey={apiKey}
-        setApiKey={setApiKey}
-        model={model}
-        setModel={setModel}
-      />
 
       {/* Footer */}
       <footer className="border-t border-slate-800 bg-slate-900/50 py-4 text-center text-xs text-slate-500">
