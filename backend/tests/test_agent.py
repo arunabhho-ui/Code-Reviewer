@@ -1,7 +1,18 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from app.services.sandbox import execute_in_sandbox, run_python_local_sandbox, run_javascript_local_sandbox
+from app.services.sandbox import execute_in_sandbox, resolve_sandbox_files, run_python_local_sandbox, run_javascript_local_sandbox
+
+
+@pytest.mark.parametrize("language, expected_code, expected_test", [
+    ("python", "solution.py", "test_solution.py"),
+    ("javascript", "solution.js", "test_solution.js"),
+    ("typescript", "solution.ts", "test_solution.ts"),
+    ("c", "solution.c", "test_solution.c"),
+    ("java", "Solution.java", "TestSolution.java"),
+])
+def test_sandbox_uses_language_specific_test_filename(language, expected_code, expected_test):
+    assert resolve_sandbox_files(language) == (expected_code, expected_test)
 
 
 def test_python_sandbox_passing_test():
@@ -54,6 +65,23 @@ def test_declaration_sandbox_validates_d_ts_without_executing_generated_imports(
 
     assert failed.passed is False
     assert passed.passed is True
+
+
+def test_c_sandbox_reports_compiler_status():
+    code = "int add(int a, int b) { return a + b; }\n"
+    test_code = "#include <assert.h>\nint add(int, int);\nint main(void) { assert(add(2, 3) == 5); return 0; }\n"
+    result = execute_in_sandbox(code, test_code, "c", timeout=10)
+    assert result.sandbox_mode in ("local_sandbox", "docker")
+    assert "Unsupported sandbox language" not in result.stderr
+    if result.error_message != "C compiler unavailable":
+        assert result.passed is True
+
+
+def test_java_sandbox_runs_plain_main_test():
+    code = "public class Calculator { public static int add(int a, int b) { return a + b; } }\n"
+    test_code = "class TestSolution { public static void main(String[] args) { if (Calculator.add(2, 3) != 5) throw new AssertionError(); } }\n"
+    result = execute_in_sandbox(code, test_code, "java", timeout=10, filename="Calculator.java")
+    assert result.passed is True
 
 
 @pytest.mark.asyncio

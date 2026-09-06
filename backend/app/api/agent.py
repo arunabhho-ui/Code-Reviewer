@@ -5,6 +5,16 @@ from fastapi.responses import StreamingResponse
 from app.models.schemas import AgentFixRequest, AgentFixResponse, TokenUsage
 from app.services.agent_loop import run_agent_fix_stream
 
+
+def default_agent_filename(language: str) -> str:
+    return {
+        "python": "solution.py",
+        "javascript": "solution.js",
+        "typescript": "solution.ts",
+        "c": "solution.c",
+        "java": "Solution.java",
+    }.get(language, "solution.py")
+
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
 
@@ -19,7 +29,7 @@ async def stream_agent_fix(request: AgentFixRequest):
             async for step in run_agent_fix_stream(
                 code=request.code,
                 language=request.language,
-                filename=request.filename or "solution.py",
+                filename=request.filename or default_agent_filename(request.language),
                 bug_description=request.bug_description,
                 test_code=request.test_code,
                 api_key=request.api_key,
@@ -56,7 +66,7 @@ async def run_agent_fix_sync(request: AgentFixRequest):
         async for step in run_agent_fix_stream(
             code=request.code,
             language=request.language,
-            filename=request.filename or "solution.py",
+            filename=request.filename or default_agent_filename(request.language),
             bug_description=request.bug_description,
             test_code=request.test_code,
             api_key=request.api_key,

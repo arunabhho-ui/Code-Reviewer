@@ -54,6 +54,50 @@ FIX_PROPOSAL_TOOL = {
 }
 
 
+def is_groq_rate_limit_error(error: Exception) -> bool:
+    return (
+        getattr(error, "status_code", None) == 429
+        or "rate_limit_exceeded" in str(error)
+        or "rate limit" in str(error).lower()
+    )
+
+
+async def create_groq_completion(client: AsyncOpenAI, model: str, **kwargs):
+    """Retry temporary TPM responses and fall back to the smaller Groq model."""
+    models = [model]
+    if "llama-3.1-8b-instant" not in models:
+        models.append("llama-3.1-8b-instant")
+
+    last_error = None
+    for candidate_model in models:
+        for retry in range(settings.GROQ_RATE_LIMIT_RETRIES + 1):
+            try:
+                return await client.chat.completions.create(model=candidate_model, **kwargs)
+            except Exception as error:
+                last_error = error
+                if not is_groq_rate_limit_error(error) or retry >= settings.GROQ_RATE_LIMIT_RETRIES:
+                    break
+                await asyncio.sleep(settings.GROQ_RATE_LIMIT_BACKOFF_SECONDS * (retry + 1))
+    raise last_error
+
+
+def fallback_test_code(language: str) -> str:
+    """Return a compilable smoke test when test generation is unavailable."""
+    normalized_language = language.lower()
+    if normalized_language == "python":
+        return "import solution\n\ndef test_smoke():\n    assert solution is not None\n"
+    if normalized_language in ("javascript", "typescript"):
+        return (
+            "const test = require('node:test');\n"
+            "const assert = require('node:assert');\n"
+            "const solution = require('./solution');\n\n"
+            "test('smoke test', () => { assert.ok(solution); });\n"
+        )
+    if normalized_language == "c":
+        return "int main(void) { return 0; }\n"
+    return "class TestSolution { public static void main(String[] args) { } }\n"
+
+
 def calculate_diff(original: str, modified: str, filename: str = "solution") -> str:
     orig_lines = original.splitlines(keepends=True)
     mod_lines = modified.splitlines(keepends=True)
@@ -91,16 +135,23 @@ Target Bug / Focus:
 Requirements:
 - For Python: Use pytest/unittest. Import functions from `solution` (e.g. `from solution import ...` or `import solution`).
 - For JavaScript: Use `node:test` and `node:assert` (or assert). Import from `./solution` (e.g. `const {{ ... }} = require('./solution')` or `const solution = require('./solution')`).
+- For TypeScript: Use Node's built-in test runner and import from `./solution`.
+- For C: Write a standalone `main` test harness in C that declares the functions under test and returns nonzero on failed assertions. Do not copy or implement any solution functions in the harness. Do not define a `main` function in the solution code.
+- For Java: Write a plain `class TestSolution` with a `public static void main(String[] args)` method and assertions. Do not use external test libraries.
 - Write 2-3 focused test cases: 1 reproducing the bug condition, and 1-2 testing standard valid inputs.
 - Call the `generate_unit_tests` tool."""
 
-    response = await client.chat.completions.create(
-        model=model,
-        max_tokens=2048,
-        messages=[{"role": "user", "content": prompt}],
-        tools=[TEST_GEN_TOOL],
-        tool_choice={"type": "function", "function": {"name": "generate_unit_tests"}},
-    )
+    try:
+        response = await create_groq_completion(
+            client,
+            model,
+            max_tokens=2048,
+            messages=[{"role": "user", "content": prompt}],
+            tools=[TEST_GEN_TOOL],
+            tool_choice={"type": "function", "function": {"name": "generate_unit_tests"}},
+        )
+    except Exception:
+        return fallback_test_code(language), 0, 0
 
     usage = response.usage
     in_tokens = usage.prompt_tokens if usage else 0
@@ -110,15 +161,15 @@ Requirements:
     choice = response.choices[0]
     for tc in (choice.message.tool_calls or []):
         if tc.function.name == "generate_unit_tests":
-            data = json.loads(tc.function.arguments)
+            try:
+                data = json.loads(tc.function.arguments)
+            except (TypeError, json.JSONDecodeError):
+                data = {}
             test_code = data.get("test_code", "")
             break
 
     if not test_code:
-        if is_py:
-            test_code = "import solution\n\ndef test_smoke():\n    assert solution is not None\n"
-        else:
-            test_code = "const test = require('node:test');\nconst assert = require('node:assert');\nconst solution = require('./solution');\n\ntest('smoke test', () => {\n  assert.ok(solution);\n});\n"
+        test_code = fallback_test_code(language)
 
     return test_code, in_tokens, out_tokens
 
@@ -298,8 +349,9 @@ by a generated test are unavailable in the sandbox."""
         conversation_history.append({"role": "user", "content": fix_prompt})
 
         try:
-            response = await client.chat.completions.create(
-                model=model,
+            response = await create_groq_completion(
+                client,
+                model,
                 max_tokens=4096,
                 messages=conversation_history,
                 tools=[FIX_PROPOSAL_TOOL],
@@ -382,6 +434,16 @@ by a generated test are unavailable in the sandbox."""
                 })
 
         except Exception as e:
+            if is_groq_rate_limit_error(e):
+                yield {
+                    "event": "error",
+                    "data": {
+                        "message": "Groq rate limit reached. Wait for the TPM window to reset, then retry; changing API keys may not help when the limit is organization-wide.",
+                        "fatal": False,
+                        "rate_limited": True,
+                    }
+                }
+                break
             yield {
                 "event": "error",
                 "data": {"message": f"Attempt {attempt} encountered an error: {str(e)}", "fatal": False}

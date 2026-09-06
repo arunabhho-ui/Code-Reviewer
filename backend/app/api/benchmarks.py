@@ -1,17 +1,17 @@
-import os
 import sys
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-# Ensure root workspace and benchmarks directory are in sys.path
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-benchmarks_dir = os.path.join(root_dir, "benchmarks")
-if benchmarks_dir not in sys.path:
-    sys.path.insert(0, benchmarks_dir)
+# Make the repository package importable both from the backend directory and
+# from the container's /app working directory.
+repository_root = Path(__file__).resolve().parents[3]
+if str(repository_root) not in sys.path:
+    sys.path.insert(0, str(repository_root))
 
-from dataset import BENCHMARK_SUITE
-from evaluate import evaluate_single_benchmark, run_evaluation_suite
+from benchmarks.dataset import BENCHMARK_SUITE
+from benchmarks.evaluate import evaluate_single_benchmark, run_evaluation_suite
 
 router = APIRouter(prefix="/api/benchmarks", tags=["benchmarks"])
 

@@ -219,10 +219,93 @@ def analyze_javascript_code(code: str, filename: str = "snippet.js") -> List[Sta
     return findings
 
 
+def analyze_c_code(code: str, filename: str = "snippet.c") -> List[StaticFinding]:
+    """Run compiler syntax checks and flag common unsafe C operations."""
+    findings: List[StaticFinding] = []
+    lines = code.split("\n")
+    for idx, line in enumerate(lines, 1):
+        if re.search(r"\bstrcpy\s*\(", line):
+            findings.append(StaticFinding(
+                file=filename, line=idx, rule="C-UNSAFE-STRCPY",
+                message="strcpy() does not enforce the destination buffer size and can overflow it",
+                severity="high", category="security",
+            ))
+        if re.search(r"\bgets\s*\(", line):
+            findings.append(StaticFinding(
+                file=filename, line=idx, rule="C-UNSAFE-GETS",
+                message="gets() cannot limit input length and is unsafe; use fgets() instead",
+                severity="critical", category="security",
+            ))
+
+    temp_dir = tempfile.mkdtemp(prefix="review_c_")
+    file_path = os.path.join(temp_dir, os.path.basename(filename) if filename.endswith((".c", ".h")) else "snippet.c")
+    try:
+        with open(file_path, "w", encoding="utf-8") as file:
+            file.write(code)
+        result = subprocess.run(["gcc", "-fsyntax-only", file_path], capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            findings.append(StaticFinding(
+                file=filename, line=1, rule="C-SYNTAX-ERROR",
+                message=f"C syntax error: {result.stderr.splitlines()[0] if result.stderr else 'Invalid syntax'}",
+                severity="critical", category="bug",
+            ))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    finally:
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            os.rmdir(temp_dir)
+        except OSError:
+            pass
+    return findings
+
+
+def analyze_java_code(code: str, filename: str = "Snippet.java") -> List[StaticFinding]:
+    """Run javac syntax checks and flag resources that should use try-with-resources."""
+    findings: List[StaticFinding] = []
+    lines = code.split("\n")
+    for idx, line in enumerate(lines, 1):
+        if re.search(r"\bnew\s+(?:FileReader|FileInputStream|BufferedReader|InputStreamReader)\s*\(", line):
+            findings.append(StaticFinding(
+                file=filename, line=idx, rule="JAVA-RESOURCE-LEAK",
+                message="Close this I/O resource or use try-with-resources to prevent resource leaks",
+                severity="medium", category="bug",
+            ))
+
+    temp_dir = tempfile.mkdtemp(prefix="review_java_")
+    safe_filename = os.path.basename(filename) if filename.endswith(".java") else "Snippet.java"
+    file_path = os.path.join(temp_dir, safe_filename)
+    try:
+        with open(file_path, "w", encoding="utf-8") as file:
+            file.write(code)
+        result = subprocess.run(["javac", "-Xlint:none", "-d", temp_dir, file_path], capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            findings.append(StaticFinding(
+                file=filename, line=1, rule="JAVA-SYNTAX-ERROR",
+                message=f"Java compilation error: {result.stderr.splitlines()[0] if result.stderr else 'Invalid syntax'}",
+                severity="critical", category="bug",
+            ))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    finally:
+        try:
+            for name in os.listdir(temp_dir):
+                os.remove(os.path.join(temp_dir, name))
+            os.rmdir(temp_dir)
+        except OSError:
+            pass
+    return findings
+
+
 def run_static_analysis(code: str, language: str, filename: str = "snippet") -> List[StaticFinding]:
     """Unified entry point for static analysis."""
     if language.lower() == "python":
         return analyze_python_code(code, filename)
     elif language.lower() in ("javascript", "typescript", "js", "ts"):
         return analyze_javascript_code(code, filename)
+    elif language.lower() in ("c", "c++", "cpp"):
+        return analyze_c_code(code, filename)
+    elif language.lower() == "java":
+        return analyze_java_code(code, filename)
     return []

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # LLM Settings — Groq Cloud is the default provider, with Grok compatibility retained.
     LLM_PROVIDER: str = "groq"
     GROQ_API_KEY: Optional[str] = ""
-    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    GROQ_MODEL: str = "llama-3.1-8b-instant"
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     GROK_API_KEY: Optional[str] = ""
     GROK_MODEL: str = "grok-3"
@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     SANDBOX_MEMORY_LIMIT: str = "512m"
     SANDBOX_CPU_QUOTA: int = 100000  # 1.0 CPU
     USE_DOCKER_SANDBOX: bool = True
+    GROQ_RATE_LIMIT_RETRIES: int = 2
+    GROQ_RATE_LIMIT_BACKOFF_SECONDS: float = 5.0
 
     # CORS
     CORS_ORIGINS: List[str] = [

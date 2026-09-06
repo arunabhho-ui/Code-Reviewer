@@ -45,6 +45,10 @@ export default function CodeEditor({
       setLanguage('javascript');
     } else if (file.name.endsWith('.ts') || file.name.endsWith('.tsx')) {
       setLanguage('typescript');
+    } else if (file.name.endsWith('.c') || file.name.endsWith('.h')) {
+      setLanguage('c');
+    } else if (file.name.endsWith('.java')) {
+      setLanguage('java');
     }
 
     const reader = new FileReader();
@@ -73,8 +77,14 @@ export default function CodeEditor({
                 setLanguage(lang);
                 if (lang === 'python' && !filename.endsWith('.py')) {
                   setFilename('snippet.py');
-                } else if ((lang === 'javascript' || lang === 'typescript') && filename.endsWith('.py')) {
-                  setFilename(lang === 'typescript' ? 'snippet.ts' : 'snippet.js');
+                } else if (lang === 'javascript' && !filename.endsWith('.js') && !filename.endsWith('.jsx')) {
+                  setFilename('snippet.js');
+                } else if (lang === 'typescript' && !filename.endsWith('.ts') && !filename.endsWith('.tsx')) {
+                  setFilename('snippet.ts');
+                } else if (lang === 'c' && !filename.endsWith('.c') && !filename.endsWith('.h')) {
+                  setFilename('snippet.c');
+                } else if (lang === 'java' && !filename.endsWith('.java')) {
+                  setFilename('Snippet.java');
                 }
               }}
               className="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer"
@@ -82,6 +92,8 @@ export default function CodeEditor({
               <option value="python" className="bg-slate-900 text-white">Python</option>
               <option value="javascript" className="bg-slate-900 text-white">JavaScript</option>
               <option value="typescript" className="bg-slate-900 text-white">TypeScript</option>
+              <option value="c" className="bg-slate-900 text-white">C</option>
+              <option value="java" className="bg-slate-900 text-white">Java</option>
             </select>
           </div>
 
@@ -115,7 +127,7 @@ export default function CodeEditor({
             type="file"
             ref={fileInputRef}
             onChange={handleFileUpload}
-            accept=".py,.js,.jsx,.ts,.tsx,.txt"
+            accept=".py,.js,.jsx,.ts,.tsx,.c,.h,.java,.txt"
             className="hidden"
           />
           <button

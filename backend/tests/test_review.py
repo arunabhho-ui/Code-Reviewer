@@ -28,6 +28,20 @@ def test_js_static_analysis():
     assert "JS-SECURITY-INNERHTML" in rules
 
 
+def test_c_static_analysis():
+    findings = run_static_analysis("#include <string.h>\nvoid f(char *src) { char buffer[8]; strcpy(buffer, src); }", "c", "vulnerable.c")
+    assert "C-UNSAFE-STRCPY" in [finding.rule for finding in findings]
+
+
+def test_java_static_analysis():
+    findings = run_static_analysis(
+        "import java.io.*; class Sample { void read(String path) throws Exception { BufferedReader br = new BufferedReader(new FileReader(path)); } }",
+        "java",
+        "Sample.java",
+    )
+    assert "JAVA-RESOURCE-LEAK" in [finding.rule for finding in findings]
+
+
 @pytest.mark.asyncio
 async def test_review_endpoint_payload():
     transport = ASGITransport(app=app)

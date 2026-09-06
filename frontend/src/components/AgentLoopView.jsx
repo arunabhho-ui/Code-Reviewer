@@ -65,6 +65,22 @@ export default function AgentLoopView({
 
   const abortControllerRef = useRef(null);
 
+  const handleLanguageChange = (nextLanguage) => {
+    setLanguage(nextLanguage);
+    const extensionByLanguage = {
+      python: '.py',
+      javascript: '.js',
+      typescript: '.ts',
+      c: '.c',
+      java: '.java',
+    };
+    const extension = extensionByLanguage[nextLanguage];
+    if (extension && !filename.toLowerCase().endsWith(extension)) {
+      setFilename(nextLanguage === 'java' ? 'Solution.java' : `solution${extension}`);
+    }
+    setTestCode('');
+  };
+
   // Sync if initialPayload changes
   useEffect(() => {
     if (initialPayload) {
@@ -364,28 +380,54 @@ export default function AgentLoopView({
 
           {/* Code & Test Tabs */}
           <div className="rounded-xl border border-slate-800 bg-slate-900/70 overflow-hidden flex-1 flex flex-col min-h-[380px]">
-            <div className="px-3 py-2 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs">
-                <button
-                  onClick={() => setActiveCodeTab('code')}
-                  className={`px-3 py-1 rounded-md font-medium transition ${
-                    activeCodeTab === 'code' ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Source Code ({filename})
-                </button>
-                <button
-                  onClick={() => setActiveCodeTab('test')}
-                  className={`px-3 py-1 rounded-md font-medium transition ${
-                    activeCodeTab === 'test' ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Unit Tests {testCode ? '(Loaded)' : '(Auto-generated)'}
-                </button>
+            <div className="px-3 py-2 bg-slate-900 border-b border-slate-800 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 px-2 py-1 rounded-lg min-w-0">
+                  <FileCode className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />
+                  <select
+                    value={language}
+                    onChange={(e) => handleLanguageChange(e.target.value)}
+                    disabled={isRunning}
+                    className="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer min-w-0"
+                    aria-label="Source language"
+                  >
+                    <option value="python" className="bg-slate-900 text-white">Python</option>
+                    <option value="javascript" className="bg-slate-900 text-white">JavaScript</option>
+                    <option value="typescript" className="bg-slate-900 text-white">TypeScript</option>
+                    <option value="c" className="bg-slate-900 text-white">C</option>
+                    <option value="java" className="bg-slate-900 text-white">Java</option>
+                  </select>
+                </div>
+                <input
+                  type="text"
+                  value={filename}
+                  onChange={(e) => setFilename(e.target.value)}
+                  disabled={isRunning}
+                  aria-label="Source filename"
+                  className="bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300 px-2 py-1 rounded-lg focus:outline-none focus:border-sky-500 w-24 sm:w-28"
+                />
+                <div className="flex flex-wrap bg-slate-800 p-0.5 rounded-lg border border-slate-700 text-xs min-w-0">
+                  <button
+                    onClick={() => setActiveCodeTab('code')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition text-[10px] sm:text-xs whitespace-nowrap ${
+                      activeCodeTab === 'code' ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Source Code ({filename})
+                  </button>
+                  <button
+                    onClick={() => setActiveCodeTab('test')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition text-[10px] sm:text-xs whitespace-nowrap ${
+                      activeCodeTab === 'test' ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Unit Tests {testCode ? '(Loaded)' : '(Auto-generated)'}
+                  </button>
+                </div>
               </div>
 
-              <div className="text-[11px] text-slate-400 font-mono">
-                {language.toUpperCase()}
+              <div className="text-[11px] text-slate-400 font-mono hidden sm:block">
+                {language.toUpperCase()} TESTS
               </div>
             </div>
 
@@ -410,7 +452,7 @@ export default function AgentLoopView({
                 {!testCode && (
                   <div className="p-2.5 bg-slate-900/80 border-t border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
                     <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Agent will auto-synthesize pytest/node:test assertions before repair.</span>
+                    <span>Agent will auto-synthesize {language === 'python' ? 'pytest' : language === 'java' ? 'Java main' : language === 'c' ? 'C harness' : 'runtime'} assertions before repair.</span>
                   </div>
                 )}
               </div>

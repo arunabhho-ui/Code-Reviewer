@@ -50,7 +50,14 @@ async def review_code(request: ReviewRequest, http_request: Request):
     enforce_review_rate_limit(client_ip)
 
     start_time = time.time()
-    filename = request.filename or ("snippet.py" if request.language == "python" else "snippet.js")
+    default_filenames = {
+        "python": "snippet.py",
+        "javascript": "snippet.js",
+        "typescript": "snippet.ts",
+        "c": "snippet.c",
+        "java": "Snippet.java",
+    }
+    filename = request.filename or default_filenames[request.language]
 
     try:
         # Step 1: Static analysis pass

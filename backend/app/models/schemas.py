@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 SeverityLevel = Literal["critical", "high", "medium", "low", "info"]
 IssueCategory = Literal["bug", "security", "performance", "style"]
-SupportedLanguage = Literal["python", "javascript", "typescript"]
+SupportedLanguage = Literal["python", "javascript", "typescript", "c", "java"]
 
 
 class ReviewRequest(BaseModel):
@@ -108,7 +108,7 @@ class ReviewResponse(BaseModel):
 class AgentFixRequest(BaseModel):
     code: str = Field(..., min_length=1, description="Source code containing the bug")
     language: SupportedLanguage = Field("python", description="Programming language")
-    filename: Optional[str] = Field("solution.py", description="Target filename")
+    filename: Optional[str] = Field(None, description="Target filename; inferred from language when omitted")
     bug_description: Optional[str] = Field(None, description="Description of the bug to fix")
     test_code: Optional[str] = Field(None, description="Optional existing test suite to run against")
     api_key: Optional[str] = Field(None, description="Optional Groq API key")

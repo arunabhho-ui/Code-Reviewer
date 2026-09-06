@@ -275,8 +275,50 @@ def chunk_file(code: str, file_path: str, language: str) -> List[CodeChunk]:
     """Unified AST / symbol chunker dispatch."""
     if language.lower() == "python":
         return chunk_python_file(code, file_path)
-    else:
+    if language.lower() in ("javascript", "typescript"):
         return chunk_javascript_file(code, file_path)
+
+    # C and Java use a conservative symbol chunker until language-specific AST
+    # parsers are introduced; preserving whole-file context is safer than
+    # dropping supported files from the repository index.
+    lines = code.splitlines()
+    chunks: List[CodeChunk] = []
+    symbol_pattern = re.compile(
+        r"(?:^|\s)(?:class|struct|enum|interface)\s+([A-Za-z_]\w*)|"
+        r"(?:^|\s)[A-Za-z_][\w<>:*&\[\], ]*\s+([A-Za-z_]\w*)\s*\([^;{}]*\)\s*\{"
+    )
+    for index, line in enumerate(lines):
+        match = symbol_pattern.search(line)
+        if not match:
+            continue
+        symbol_name = match.group(1) or match.group(2)
+        chunks.append(CodeChunk(
+            chunk_id=f"{file_path}:{symbol_name}:{index + 1}",
+            file_path=file_path,
+            symbol_name=symbol_name,
+            symbol_type="class" if match.group(1) else "function",
+            language=language,
+            code="\n".join(lines[index:]),
+            line_start=index + 1,
+            line_end=len(lines),
+            calls=[],
+            bases=[],
+        ))
+
+    if not chunks and code.strip():
+        chunks.append(CodeChunk(
+            chunk_id=f"{file_path}:module",
+            file_path=file_path,
+            symbol_name=file_path.split("/")[-1],
+            symbol_type="module",
+            language=language,
+            code=code,
+            line_start=1,
+            line_end=len(lines),
+            calls=[],
+            bases=[],
+        ))
+    return chunks
 
 
 def sanitize_collection_name(name: str) -> str:
@@ -314,7 +356,13 @@ def index_repository_files(
     for f in files:
         path = f.get("path") or f.get("filename") or "file.py"
         content = f.get("content", "")
-        lang = f.get("language") or ("python" if path.endswith(".py") else "javascript")
+        lang = f.get("language") or (
+            "python" if path.endswith(".py") else
+            "typescript" if path.endswith((".ts", ".tsx")) else
+            "c" if path.endswith((".c", ".h")) else
+            "java" if path.endswith(".java") else
+            "javascript"
+        )
         chunks = chunk_file(content, path, lang)
         all_chunks.extend(chunks)
 

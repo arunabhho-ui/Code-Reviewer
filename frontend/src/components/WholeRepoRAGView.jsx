@@ -93,7 +93,7 @@ export default function WholeRepoRAGView({
     const reviewableFiles = inspectData.reviewable_files || [];
 
     if (!reviewableFiles.length) {
-      setRepoError('No supported Python/JS/TS files were found in this repository.');
+      setRepoError('No supported Python/JS/TS/C/Java files were found in this repository.');
       setLoadingRepo(false);
       return;
     }
@@ -222,7 +222,7 @@ export default function WholeRepoRAGView({
               </span>
             </div>
             <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-              Paste a GitHub repository URL, fetch the supported Python/JS/TS files, index them into ChromaDB, and review one file with cross-file symbol context from the rest of the repo.
+              Paste a GitHub repository URL, fetch supported Python, JS/TS, C, and Java files, index them into ChromaDB, and review one file with cross-file symbol context from the rest of the repo.
             </p>
           </div>
 

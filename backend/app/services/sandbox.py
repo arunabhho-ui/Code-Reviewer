@@ -52,6 +52,32 @@ def is_docker_available() -> bool:
     return _DOCKER_AVAILABLE
 
 
+def is_docker_image_available(image: str) -> bool:
+    """Return whether a sandbox image is already cached locally."""
+    if not is_docker_available():
+        return False
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", image],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=1.5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def docker_image_for_language(language: str) -> Optional[str]:
+    return {
+        "python": "python:3.12-alpine",
+        "javascript": "node:22-alpine",
+        "typescript": "node:22-alpine",
+        "c": "gcc:14-bookworm",
+        "java": "eclipse-temurin:21-jdk",
+    }.get(language)
+
+
 def normalize_sandbox_language(language: str, filename: Optional[str] = None) -> str:
     """Resolve the actual runtime language from both the label and the filename."""
     if filename:
@@ -60,6 +86,10 @@ def normalize_sandbox_language(language: str, filename: Optional[str] = None) ->
             return "typescript"
         if lower_name.endswith((".js", ".jsx", ".mjs", ".cjs")):
             return "javascript"
+        if lower_name.endswith((".c", ".h")):
+            return "c"
+        if lower_name.endswith(".java"):
+            return "java"
 
     if language is None:
         return "python"
@@ -71,6 +101,10 @@ def normalize_sandbox_language(language: str, filename: Optional[str] = None) ->
         return "javascript"
     if normalized in ("python", "py"):
         return "python"
+    if normalized in ("c", "c11", "c17"):
+        return "c"
+    if normalized in ("java", "jdk"):
+        return "java"
     return normalized
 
 
@@ -81,6 +115,10 @@ def resolve_sandbox_files(language: str, filename: Optional[str] = None) -> tupl
         return "solution.py", "test_solution.py"
     if runtime_lang == "typescript":
         return "solution.ts", "test_solution.ts"
+    if runtime_lang == "c":
+        return "solution.c", "test_solution.c"
+    if runtime_lang == "java":
+        return (os.path.basename(filename) if filename and filename.lower().endswith(".java") else "Solution.java"), "TestSolution.java"
     return "solution.js", "test_solution.js"
 
 
@@ -339,6 +377,142 @@ def run_typescript_local_sandbox(code: str, test_code: str, timeout: int = 10) -
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def run_c_local_sandbox(code: str, test_code: str, timeout: int = 10) -> SandboxResult:
+    """Compiles a C solution and harness separately, then runs the linked test binary."""
+    temp_dir = tempfile.mkdtemp(prefix="agent_sandbox_c_")
+    start_time = time.time()
+    try:
+        compiler = shutil.which("gcc") or shutil.which("clang")
+        if not compiler:
+            return SandboxResult(
+                passed=False, exit_code=127, stdout="", stderr="No C compiler (gcc or clang) is available",
+                duration_ms=round((time.time() - start_time) * 1000, 2), timed_out=False,
+                sandbox_mode="local_sandbox", error_message="C compiler unavailable",
+            )
+
+        code_file = os.path.join(temp_dir, "solution.c")
+        test_file = os.path.join(temp_dir, "test_solution.c")
+        solution_object = os.path.join(temp_dir, "solution.o")
+        test_object = os.path.join(temp_dir, "test_solution.o")
+        executable = os.path.join(temp_dir, "sandbox_test.exe" if os.name == "nt" else "sandbox_test")
+        with open(code_file, "w", encoding="utf-8") as file:
+            file.write(code)
+        with open(test_file, "w", encoding="utf-8") as file:
+            file.write(test_code)
+
+        compile_solution = subprocess.run(
+            [compiler, "-std=c11", "-Dmain=solution_main", "-c", code_file, "-o", solution_object],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if compile_solution.returncode != 0:
+            return SandboxResult(
+                passed=False, exit_code=compile_solution.returncode, stdout=compile_solution.stdout,
+                stderr=compile_solution.stderr, duration_ms=round((time.time() - start_time) * 1000, 2),
+                timed_out=False, sandbox_mode="local_sandbox",
+            )
+
+        compile_test = subprocess.run(
+            [compiler, "-std=c11", "-c", test_file, "-o", test_object],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if compile_test.returncode != 0:
+            return SandboxResult(
+                passed=False, exit_code=compile_test.returncode, stdout=compile_test.stdout,
+                stderr=compile_test.stderr, duration_ms=round((time.time() - start_time) * 1000, 2),
+                timed_out=False, sandbox_mode="local_sandbox",
+            )
+
+        link = subprocess.run(
+            [compiler, solution_object, test_object, "-o", executable],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if link.returncode != 0:
+            return SandboxResult(
+                passed=False, exit_code=link.returncode, stdout=link.stdout, stderr=link.stderr,
+                duration_ms=round((time.time() - start_time) * 1000, 2), timed_out=False,
+                sandbox_mode="local_sandbox",
+            )
+
+        process = subprocess.run([executable], cwd=temp_dir, capture_output=True, text=True, timeout=timeout)
+        return SandboxResult(
+            passed=process.returncode == 0, exit_code=process.returncode, stdout=process.stdout,
+            stderr=process.stderr, duration_ms=round((time.time() - start_time) * 1000, 2),
+            timed_out=False, sandbox_mode="local_sandbox",
+        )
+    except subprocess.TimeoutExpired:
+        return SandboxResult(
+            passed=False, exit_code=-1, stdout="", stderr=f"Execution timed out after {timeout} seconds",
+            duration_ms=round((time.time() - start_time) * 1000, 2), timed_out=True,
+            sandbox_mode="local_sandbox", error_message="Execution timeout exceeded",
+        )
+    except Exception as error:
+        return SandboxResult(
+            passed=False, exit_code=1, stdout="", stderr=str(error),
+            duration_ms=round((time.time() - start_time) * 1000, 2), timed_out=False,
+            sandbox_mode="local_sandbox", error_message=str(error),
+        )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def run_java_local_sandbox(code: str, test_code: str, timeout: int = 10, filename: Optional[str] = None) -> SandboxResult:
+    """Compiles a Java source file and a plain-main test harness, then runs the harness."""
+    temp_dir = tempfile.mkdtemp(prefix="agent_sandbox_java_")
+    start_time = time.time()
+    try:
+        javac = shutil.which("javac")
+        java = shutil.which("java")
+        if not javac or not java:
+            return SandboxResult(
+                passed=False, exit_code=127, stdout="", stderr="Java runtime (javac and java) is unavailable",
+                duration_ms=round((time.time() - start_time) * 1000, 2), timed_out=False,
+                sandbox_mode="local_sandbox", error_message="Java runtime unavailable",
+            )
+
+        code_filename = os.path.basename(filename) if filename and filename.lower().endswith(".java") else "Solution.java"
+        code_file = os.path.join(temp_dir, code_filename)
+        test_file = os.path.join(temp_dir, "TestSolution.java")
+        with open(code_file, "w", encoding="utf-8") as file:
+            file.write(code)
+        with open(test_file, "w", encoding="utf-8") as file:
+            file.write(test_code)
+
+        compile_result = subprocess.run(
+            [javac, "-d", temp_dir, code_file, test_file],
+            cwd=temp_dir, capture_output=True, text=True, timeout=timeout,
+        )
+        if compile_result.returncode != 0:
+            return SandboxResult(
+                passed=False, exit_code=compile_result.returncode, stdout=compile_result.stdout,
+                stderr=compile_result.stderr, duration_ms=round((time.time() - start_time) * 1000, 2),
+                timed_out=False, sandbox_mode="local_sandbox",
+            )
+
+        process = subprocess.run(
+            [java, "-cp", temp_dir, "TestSolution"],
+            cwd=temp_dir, capture_output=True, text=True, timeout=timeout,
+        )
+        return SandboxResult(
+            passed=process.returncode == 0, exit_code=process.returncode, stdout=process.stdout,
+            stderr=process.stderr, duration_ms=round((time.time() - start_time) * 1000, 2),
+            timed_out=False, sandbox_mode="local_sandbox",
+        )
+    except subprocess.TimeoutExpired:
+        return SandboxResult(
+            passed=False, exit_code=-1, stdout="", stderr=f"Execution timed out after {timeout} seconds",
+            duration_ms=round((time.time() - start_time) * 1000, 2), timed_out=True,
+            sandbox_mode="local_sandbox", error_message="Execution timeout exceeded",
+        )
+    except Exception as error:
+        return SandboxResult(
+            passed=False, exit_code=1, stdout="", stderr=str(error),
+            duration_ms=round((time.time() - start_time) * 1000, 2), timed_out=False,
+            sandbox_mode="local_sandbox", error_message=str(error),
+        )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def run_docker_sandbox(
     code: str,
     test_code: str,
@@ -365,16 +539,22 @@ def run_docker_sandbox(
                 else test_code
             )
 
-        image = "python:3.12-alpine" if is_python else "node:22-alpine"
-        test_cmd = (
-            "python -m unittest test_solution.py -v"
-            if is_python
-            else (
-                "node --experimental-strip-types --test test_solution.ts"
-                if resolved_language == "typescript"
-                else "node --test test_solution.js"
-            )
-        )
+        image_by_language = {
+            "python": "python:3.12-alpine",
+            "javascript": "node:22-alpine",
+            "typescript": "node:22-alpine",
+            "c": "gcc:14-bookworm",
+            "java": "eclipse-temurin:21-jdk",
+        }
+        command_by_language = {
+            "python": "python -m unittest test_solution.py -v",
+            "javascript": "node --test test_solution.js",
+            "typescript": "node --experimental-strip-types --test test_solution.ts",
+            "c": "gcc -std=c11 -Dmain=solution_main -c solution.c -o solution.o && gcc -std=c11 -c test_solution.c -o test_solution.o && gcc solution.o test_solution.o -o sandbox_test && ./sandbox_test",
+            "java": "javac -d . *.java && java TestSolution",
+        }
+        image = image_by_language[resolved_language]
+        test_cmd = command_by_language[resolved_language]
 
         docker_cmd = [
             "docker", "run", "--rm",
@@ -423,8 +603,15 @@ def run_docker_sandbox(
         # Fall back to local isolated runner
         if resolved_language == "python":
             return run_python_local_sandbox(code, test_code, timeout=timeout)
-        else:
+        if resolved_language == "javascript":
             return run_javascript_local_sandbox(code, test_code, timeout=timeout)
+        if resolved_language == "typescript":
+            return run_typescript_local_sandbox(code, test_code, timeout=timeout)
+        if resolved_language == "c":
+            return run_c_local_sandbox(code, test_code, timeout=timeout)
+        if resolved_language == "java":
+            return run_java_local_sandbox(code, test_code, timeout=timeout, filename=filename)
+        raise
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -445,12 +632,28 @@ def execute_in_sandbox(
     if resolved_language == "typescript" and is_declaration_file(filename):
         return run_declaration_local_sandbox(code, timeout=timeout)
 
+    # Prefer the language-specific Docker images when Docker is available. The
+    # C and Java images provide their compilers even when the host does not.
+    docker_image = docker_image_for_language(resolved_language)
+    if docker_image and is_docker_image_available(docker_image):
+        return run_docker_sandbox(
+            code=code,
+            test_code=test_code,
+            language=resolved_language,
+            timeout=timeout,
+            filename=filename,
+        )
+
     if resolved_language == "python":
         return run_python_local_sandbox(code, test_code, timeout=timeout)
     elif resolved_language == "javascript":
         return run_javascript_local_sandbox(code, test_code, timeout=timeout)
     elif resolved_language == "typescript":
         return run_typescript_local_sandbox(code, test_code, timeout=timeout)
+    elif resolved_language == "c":
+        return run_c_local_sandbox(code, test_code, timeout=timeout)
+    elif resolved_language == "java":
+        return run_java_local_sandbox(code, test_code, timeout=timeout, filename=filename)
     else:
         return SandboxResult(
             passed=False,

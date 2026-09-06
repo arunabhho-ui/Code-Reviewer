@@ -4,9 +4,17 @@ from app.main import app
 from app.services.rag_service import (
     chunk_python_file,
     chunk_javascript_file,
+    chunk_file,
     index_repository_files,
     retrieve_cross_file_context,
 )
+
+
+def test_c_and_java_chunking_preserves_supported_files():
+    c_chunks = chunk_file("int add(int a, int b) { return a + b; }", "math.c", "c")
+    java_chunks = chunk_file("class Calculator { int add() { return 1; } }", "Calculator.java", "java")
+    assert c_chunks and c_chunks[0].language == "c"
+    assert java_chunks and java_chunks[0].language == "java"
 
 
 def test_python_ast_chunking():

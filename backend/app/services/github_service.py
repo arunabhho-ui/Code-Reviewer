@@ -11,6 +11,9 @@ SUPPORTED_EXTENSIONS = {
     ".jsx": "javascript",
     ".ts": "typescript",
     ".tsx": "typescript",
+    ".c": "c",
+    ".h": "c",
+    ".java": "java",
 }
 
 

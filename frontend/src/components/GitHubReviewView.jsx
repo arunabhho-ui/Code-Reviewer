@@ -117,12 +117,17 @@ export default function GitHubReviewView({
   const handleRunFileReview = async (content, language, filename) => {
     // Ensure TypeScript runner for TypeScript files (including .d.ts)
     let effectiveLanguage = language;
+    // Ensure correct runner for TypeScript, C, and Java files
     if (filename && filename.toLowerCase().endsWith('.ts')) {
       effectiveLanguage = 'typescript';
     } else if (filename && filename.toLowerCase().endsWith('.tsx')) {
       effectiveLanguage = 'typescript';
     } else if (filename && filename.toLowerCase().endsWith('.d.ts')) {
       effectiveLanguage = 'typescript';
+    } else if (filename && (filename.toLowerCase().endsWith('.c') || filename.toLowerCase().endsWith('.cpp'))) {
+      effectiveLanguage = 'c';
+    } else if (filename && filename.toLowerCase().endsWith('.java')) {
+      effectiveLanguage = 'java';
     }
     setReviewing(true);
     setReviewError(null);
@@ -206,7 +211,7 @@ export default function GitHubReviewView({
               </h2>
             </div>
             <p className="text-xs text-slate-300 max-w-2xl">
-              Inspect any public GitHub repository or Pull Request diff, automatically discover reviewable Python & JS/TS files, and run the static + Grok AI review pipeline on selected files.
+              Inspect any public GitHub repository or Pull Request diff, automatically discover reviewable Python, JS/TS, C, and Java files, and run the static + Grok AI review pipeline on selected files.
             </p>
           </div>
 

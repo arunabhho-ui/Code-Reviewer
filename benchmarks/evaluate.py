@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 from app.services.sandbox import execute_in_sandbox
 from app.services.agent_loop import run_agent_fix_stream
 from app.config import settings
-from dataset import BENCHMARK_SUITE
+from benchmarks.dataset import BENCHMARK_SUITE
 
 
 async def evaluate_single_benchmark(bm: dict, api_key: str = None) -> dict:

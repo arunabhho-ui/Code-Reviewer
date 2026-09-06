@@ -1,106 +1,94 @@
 # AI Code Reviewer
 
-AI Code Reviewer is a FastAPI and Vite application for reviewing source files, inspecting GitHub repositories and pull requests, retrieving cross-file repository context, and proposing fixes that are verified in an isolated sandbox.
+AI Code Reviewer is a FastAPI and React/Vite application for source review, security analysis, GitHub inspection, repository-aware RAG, and autonomous bug fixing. A proposed repair is marked verified only after its generated or supplied tests pass in a separate sandbox.
 
-The project is designed as a live demonstration of a code-review system with a verification boundary. The model can suggest a change, but the application only presents an autonomous repair as successful after the generated or supplied tests pass in a separate execution environment.
+## Features
 
-## Architecture Overview
+- **Single-File Review:** deterministic static analysis followed by structured LLM findings and corrected source.
+- **Sandbox Fix Agent:** generates or accepts tests, runs the baseline, proposes complete-file patches, retries repairs, and streams progress over SSE.
+- **GitHub PR Mode:** inspects repositories and pull requests, fetches files, reviews them, and opens a pull request only for a sandbox-verified patch.
+- **Whole-Repo RAG:** indexes Python, JavaScript, and TypeScript symbols in ChromaDB and retrieves related cross-file context for review.
+- **Benchmarks:** runs eight curated Python and JavaScript repair cases with baseline, ground-truth, and autonomous-agent results.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    UI[React + Vite UI]
-    API[FastAPI API]
-    STATIC[Static analysis\nRuff / AST / JS rules]
-    LLM[OpenAI-compatible LLM\nGroq by default]
-    RAG[Chroma in-memory index\n64-dim code embeddings]
-    SANDBOX[Sandbox\nlocal or Docker]
-    GH[GitHub API]
-
-    UI --> API
-    API --> STATIC
-    API --> LLM
-    API --> RAG
-    API --> SANDBOX
-    API --> GH
+    UI[React + Vite UI] --> API[FastAPI API]
+    API --> STATIC[Static analysis]
+    API --> LLM[OpenAI-compatible LLM]
+    API --> RAG[Chroma in-memory index]
+    API --> SANDBOX[Local or Docker sandbox]
+    API --> GH[GitHub REST API]
     RAG --> LLM
     LLM --> SANDBOX
 ```
 
-### Main request paths
+The pipeline separates responsibilities:
 
-- **Single-file review:** the API runs deterministic checks first, then sends the source and those findings to the LLM. If no key is configured, the system still returns static-analysis findings through a deterministic fallback.
-- **GitHub PR/repository mode:** GitHub metadata and file contents are fetched through the GitHub API. Reviewable Python, JavaScript, and TypeScript files can be selected for review. A dedicated security pass is enabled in this mode.
-- **Whole-repository RAG:** supported repository files are fetched and indexed at Python AST or JavaScript/TypeScript symbol granularity. The target file is reviewed with the most relevant cross-file chunks injected into the model prompt.
-- **Autonomous sandbox fix:** the agent generates or accepts tests, runs the baseline code, asks the model for a complete repaired file, and repeats until the tests pass or the retry limit is reached. The frontend receives this process as an SSE stream.
-
-### GitHub PR auto-open
-
-GitHub mode can continue beyond review and sandbox verification. After a fix has passed in the sandbox, the UI can open a pull request from the verified result. The backend then:
-
-1. Resolves the target base branch and its commit SHA.
-2. Creates a unique `ai-review-fix/...` branch.
-3. Commits the verified replacement for the selected file through the GitHub Contents API.
-4. Opens a pull request with the finding, severity, verification type, and sandbox provenance in the body.
-
-This is intentionally a proposal workflow, not autonomous merging. A GitHub Personal Access Token is required, and the token must have permission to read the repository, create branches, write contents, and open pull requests. The generated PR explicitly states that human review, regression testing, and security review are still required. The feature is exposed through `POST /api/github/open-pr` and is available from the GitHub review and sandbox result views.
+1. Static tools find mechanical issues deterministically.
+2. Groq or another OpenAI-compatible provider reasons about intent and proposes changes.
+3. The sandbox executes tests outside the model conversation.
+4. GitHub PR creation is available only after verification succeeds.
 
 ## Why This Is Not Just an API Wrapper
 
 An API wrapper can forward source code to a model and display whatever patch comes back. That is useful for autocomplete, but it is not enough for a review or repair system where correctness matters.
 
-Models are probabilistic and can produce convincing but incorrect fixes. This project therefore makes sandbox execution the acceptance boundary: a patch is not marked verified until its tests pass outside the model conversation. The baseline run also matters because it demonstrates that the test suite actually reproduces a failure before a fix is attempted.
+Models are probabilistic and can produce convincing but incorrect fixes. This project therefore makes sandbox execution the acceptance boundary: a patch is not marked verified until its tests pass outside the model conversation. The baseline run also matters because it demonstrates that the test suite reproduces a failure before a fix is attempted.
 
 Large repositories create a second problem: sending the entire repository to a model is expensive, slow, and eventually exceeds the context window. The RAG path indexes symbols and retrieves only the cross-file context relevant to the target file. That preserves useful architectural information without treating the repository as one giant prompt.
 
-Static analysis handles another part of the reliability problem. Ruff, Python AST checks, Node syntax checks, and lightweight JavaScript security rules provide deterministic signals before the LLM review. The model gets those signals as context instead of being asked to rediscover every syntax or lint issue from scratch.
+Static analysis handles another part of the reliability problem. Ruff, Python AST checks, Node syntax checks, and lightweight JavaScript security rules provide deterministic signals before the LLM review. The model receives those signals as context instead of being asked to rediscover every syntax or lint issue from scratch.
 
 The result is a pipeline with separate responsibilities: deterministic tools find mechanical problems, the model reasons about intent and proposes changes, and the sandbox checks whether the proposed change behaves as claimed.
 
-## Tech Stack and Decisions
+## Supported Languages
 
-| Area | Choice | Why |
+The review and repair APIs accept:
+
+- `python`
+- `javascript`
+- `typescript`
+- `c`
+- `java`
+
+Declaration-only TypeScript files ending in `.d.ts` use a focused declaration validator rather than executing generated tests.
+
+## Sandbox Runners
+
+Docker is preferred when `USE_DOCKER_SANDBOX=true`, Docker is reachable, and the required image is already cached. Otherwise the backend uses local subprocess execution.
+
+| Language | Local runner | Docker image |
 | --- | --- | --- |
-| Frontend | React 18, Vite, Tailwind CSS | Fast iteration for a live multi-mode demo, with a small client-side surface and streaming agent output. |
-| Backend | FastAPI, Pydantic | Typed request contracts, automatic OpenAPI docs, async model/GitHub calls, and straightforward SSE streaming. |
-| LLM interface | OpenAI-compatible client | Groq and xAI-compatible endpoints can be selected through configuration without coupling the application to one SDK. |
-| Default model provider | Groq | Low-latency hosted inference is useful for an interactive demo and for multi-step repair loops where each attempt requires another model call. |
-| Model choices | Llama, Mixtral/Mistral-family, and GPT-OSS-compatible Groq models | Different models trade off latency, reasoning quality, context size, and cost. The configuration keeps the model choice explicit rather than hard-coding one model into the UI. |
-| Static analysis | Ruff, Python AST, Node syntax checks, rule-based JS checks | Gives repeatable, inexpensive findings before invoking the model. |
-| Repository context | ChromaDB with deterministic hashed token embeddings | Avoids an external embedding service and download step for the demo while still supporting symbol-level retrieval. |
-| Verification | Local subprocess sandbox or Docker | Keeps generated code away from the API process and provides timeout, memory, CPU, and network-isolation controls when Docker is enabled. |
-| GitHub integration | GitHub REST API | Supports public repository/PR inspection and optional authenticated access without requiring a GitHub SDK in the frontend. |
+| Python | Python with pytest/unittest fallback | `python:3.12-alpine` |
+| JavaScript | Node test runner | `node:22-alpine` |
+| TypeScript | Node native type stripping and test runner | `node:22-alpine` |
+| C | `gcc` or `clang` | `gcc:14-bookworm` |
+| Java | `javac` and `java` | `eclipse-temurin:21-jdk` |
 
-The default provider is Groq, not a separate Mistral API. Mixtral is included as a Mistral-family option when it is available in the configured Groq model list. The provider and model are configurable through environment variables, while the application retains an OpenAI-compatible request shape.
-
-## Benchmark Results
-
-The repository includes an evaluation harness in [`benchmarks/evaluate.py`](benchmarks/evaluate.py) and eight cases in [`benchmarks/dataset.json`](benchmarks/dataset.json): four Python bugs and four JavaScript bugs covering logic errors, state leaks, security, error handling, resource/concurrency issues, and off-by-one errors.
-
-The checked-in report in [`benchmarks/eval_results.json`](benchmarks/eval_results.json) was generated on 2026-09-05 with `GROQ_API_KEY` configured and the live autonomous repair loop enabled:
-
-| Metric | Result |
-| --- | ---: |
-| Benchmarks | 8 |
-| Baseline bugs reproduced | 8/8 (100%) |
-| Fixes verified in sandbox | 8/8 (100%) |
-| Average repair attempts | 1.0 |
-| Average duration | 2,830.07 ms per snippet |
-| Estimated token cost | $0.0633 total |
-
-The headline fix metric is now a live model result: all eight cases produced a model-generated repair that passed sandbox verification on the first attempt. The harness also runs the checked-in ground-truth solution separately as a control, but `fix_verified_in_sandbox` is taken from the autonomous agent result when an active provider key is available. This is still a small, curated suite rather than evidence of general reliability; the model, prompt, retry budget, and benchmark composition all affect the result.
-
-Run the local evaluation suite with:
+Docker sandbox commands use no network, one CPU, a configurable memory limit, and a strict timeout. Images are not pulled during a request. Pull them before using Docker-backed execution:
 
 ```powershell
-cd benchmarks
-..\backend\.venv\Scripts\python.exe evaluate.py
+docker pull gcc:14-bookworm
+docker pull eclipse-temurin:21-jdk
+docker pull python:3.12-alpine
+docker pull node:22-alpine
 ```
 
-Or run it from the repository root after activating the backend virtual environment:
+## Tech Stack
 
-```powershell
-python benchmarks/evaluate.py
-```
+| Area | Technology |
+| --- | --- |
+| Frontend | React 18, Vite, Tailwind CSS, Axios, Lucide |
+| Backend | FastAPI, Pydantic, Uvicorn |
+| LLM | OpenAI-compatible client, Groq by default, legacy xAI-compatible settings retained |
+| Static analysis | Ruff, Python AST checks, Node syntax checks, rule-based JavaScript checks |
+| Repository context | ChromaDB with deterministic 64-dimensional hashed-token embeddings |
+| Verification | Local subprocess execution or Docker |
+| GitHub | GitHub REST API |
+
+The current Groq default is `llama-3.1-8b-instant`. Other models listed in `backend/app/config.py` can be selected when supported by the account. Groq organization token-per-minute limits are provider-side and cannot be removed by this application.
 
 ## Setup
 
@@ -109,9 +97,9 @@ python benchmarks/evaluate.py
 - Python 3.12+
 - Node.js 20+ for the frontend
 - Node.js 22+ for local TypeScript sandbox execution
-- GitHub token only for higher GitHub API limits or private repositories
-- Groq API key for model-backed review and autonomous repair
-- Docker Desktop if Docker sandbox isolation is desired
+- Docker Desktop for stronger isolated sandbox execution
+- Groq API key for model-backed review, autonomous repair, and live agent benchmarks
+- GitHub Personal Access Token for private repositories, higher API limits, or PR creation
 
 ### Backend
 
@@ -124,20 +112,18 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Create `backend/.env` when using model-backed features:
+Copy `backend/.env.example` to `backend/.env`, then fill in secrets locally. Do not commit `backend/.env` or place real keys in screenshots, documentation, frontend source, or issue reports.
+
+Example configuration:
 
 ```dotenv
 LLM_PROVIDER=groq
 GROQ_API_KEY=your_groq_key
-GROQ_MODEL=openai/gpt-oss-120b
-
-# Optional GitHub authentication
+GROQ_MODEL=llama-3.1-8b-instant
 GITHUB_TOKEN=your_github_token
-
-# Optional sandbox controls
-USE_DOCKER_SANDBOX=false
 SANDBOX_TIMEOUT_SECONDS=10
 SANDBOX_MEMORY_LIMIT=512m
+USE_DOCKER_SANDBOX=true
 ```
 
 Start the API:
@@ -146,7 +132,13 @@ Start the API:
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Useful endpoints are available in the automatic docs at [http://localhost:8000/docs](http://localhost:8000/docs). Health status is available at [http://localhost:8000/health](http://localhost:8000/health).
+OpenAPI docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+ReDoc: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+Health: [http://localhost:8000/health](http://localhost:8000/health)
+
+Without `GROQ_API_KEY`, single-file review still returns deterministic static-analysis results, but deep model review, autonomous repair, and live agent benchmarks are unavailable.
 
 ### Frontend
 
@@ -158,44 +150,85 @@ npm install
 npm run dev -- --host 0.0.0.0
 ```
 
-Open [http://localhost:5173](http://localhost:5173). The frontend uses a same-origin API by default. For a separately hosted backend, set the Vite variable before starting the dev server:
+Open [http://localhost:5173](http://localhost:5173). The frontend uses a same-origin API by default. To point it at another backend:
 
 ```powershell
 $env:VITE_API_URL = "http://localhost:8000"
 npm run dev -- --host 0.0.0.0
 ```
 
+Build the production frontend with:
+
+```powershell
+npm run build
+```
+
 ### Docker Compose
 
-For the containerized deployment shape:
+From the repository root:
 
 ```powershell
 docker compose up --build
 ```
 
-The frontend is served at [http://localhost:3000](http://localhost:3000) and the backend at [http://localhost:8000](http://localhost:8000). Put `GROQ_API_KEY` and any other deployment variables in a root `.env` file before running Compose.
+The frontend is served at [http://localhost:3000](http://localhost:3000) and the backend at [http://localhost:8000](http://localhost:8000). The backend build uses the repository root as its context because it imports the top-level `benchmarks` package. Compose mounts `./backend` at `/app` and `./benchmarks` at `/app/benchmarks` for development.
 
-## Configuration Notes
+If port `8000` is occupied by a local Uvicorn process, stop that process or change the published host port in `docker-compose.yml`.
 
-- Without `GROQ_API_KEY`, single-file review remains usable through static-analysis fallback, but deep model findings and autonomous repair are unavailable.
-- The review endpoint has an in-memory limit of 60 requests per IP per hour. This protects a demo deployment from accidental request storms; it is not a distributed production rate limiter.
-- `USE_DOCKER_SANDBOX=true` is the intended stronger isolation mode when Docker is available. If Docker execution cannot start, the backend falls back to the local sandbox path.
-- GitHub URLs can point to a repository, branch tree, or pull request. GitHub authentication is optional for public repositories but helps avoid anonymous API limits.
+## API Reference
 
-## Known Limitations
+All routes are mounted by `backend/app/main.py` and are documented interactively at `/docs`.
 
-- The Chroma index is in memory and is not durable across backend restarts. Repository indexing must be repeated for a new process.
-- The embedding function is a deterministic 64-dimensional hashed-token representation, not a semantic embedding model. It is deliberately lightweight for the demo and can miss meaning that a learned embedding would capture.
-- RAG supports Python, JavaScript, and TypeScript source files, with heuristic symbol extraction for JavaScript/TypeScript rather than a full compiler AST.
-- The sandbox verifies a selected file plus its generated or supplied tests. It is not a complete repository build, dependency installation, integration test, or production deployment simulation.
-- Generated tests may assume project-specific dependencies that are not present in the isolated sandbox. Declaration-only `.d.ts` files therefore use a focused declaration validator rather than attempting to execute type-only code.
-- The live model result depends on the selected model, prompt, API availability, and retry budget. The checked-in benchmark report does not establish live Groq-agent accuracy.
-- The in-memory rate limiter is per process. Multiple backend replicas require a shared store such as Redis for consistent enforcement.
-- CORS defaults are intentionally permissive for deployment previews. Production deployments should restrict `CORS_ORIGINS` to the actual frontend origins.
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Service status, version, uptime, and Groq configuration status. |
+| `POST` | `/api/review` | Static analysis and structured single-file review. |
+| `POST` | `/api/agent/fix` | Synchronous autonomous repair response. |
+| `POST` | `/api/agent/fix/stream` | SSE autonomous repair events and sandbox results. |
+| `POST` | `/api/github/inspect` | Inspect a GitHub repository or pull request. |
+| `POST` | `/api/github/fetch-file` | Fetch file contents from a repository, branch, or commit. |
+| `POST` | `/api/github/open-pr` | Commit a verified replacement and open a pull request. |
+| `POST` | `/api/rag/index` | Index repository files into the in-memory Chroma collection. |
+| `POST` | `/api/rag/query` | Retrieve relevant cross-file symbol chunks. |
+| `POST` | `/api/rag/review` | Review a target file with retrieved repository context. |
+| `GET` | `/api/benchmarks/list` | List benchmark metadata and fixtures. |
+| `POST` | `/api/benchmarks/run` | Run one benchmark or the full evaluation suite. |
+
+Autonomous repair accepts `max_retries` from 1 through 5, with a default of 3. The stream endpoint returns Server-Sent Events such as test generation, baseline execution, proposed patch, sandbox result, error, and completion events.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `LLM_PROVIDER` | `groq` | Selects the active provider path. |
+| `GROQ_API_KEY` | empty | Groq credential. |
+| `GROQ_MODEL` | `llama-3.1-8b-instant` | Groq model. |
+| `GROQ_BASE_URL` | Groq OpenAI-compatible URL | Provider endpoint. |
+| `GROK_API_KEY` | empty | Legacy xAI-compatible credential fallback. |
+| `GROK_MODEL` | `grok-3` | Legacy xAI-compatible model setting. |
+| `GITHUB_TOKEN` | empty | Optional server-side GitHub credential. |
+| `SANDBOX_TIMEOUT_SECONDS` | `10` | Execution timeout. |
+| `SANDBOX_MEMORY_LIMIT` | `512m` | Docker memory limit. |
+| `USE_DOCKER_SANDBOX` | `true` | Prefer cached Docker sandbox images. |
+| `CORS_ORIGINS` | local origins plus `*` | Allowed frontend origins. |
+
+The review endpoint has an in-memory limit of 60 requests per IP per hour. This is not a distributed production rate limiter. Token counts displayed by the UI come from provider `prompt_tokens` and `completion_tokens`; the displayed cost is an estimate calculated by the backend, not an invoice.
+
+## Benchmarks
+
+The benchmark suite is defined in [`benchmarks/dataset.py`](benchmarks/dataset.py), with a JSON dataset at [`benchmarks/dataset.json`](benchmarks/dataset.json). The evaluation harness runs baseline code, ground-truth fixed code, and the autonomous repair loop when a provider key is available.
+
+Run it after creating the backend virtual environment:
+
+```powershell
+python benchmarks/evaluate.py
+```
+
+The checked-in report at [`benchmarks/eval_results.json`](benchmarks/eval_results.json) records the last measured run. It is a small curated suite, not a general reliability guarantee; results depend on model availability, prompt, retries, provider limits, and sandbox runtime.
 
 ## Testing
 
-Run the backend tests from the repository root:
+Run backend regression tests:
 
 ```powershell
 cd backend
@@ -203,15 +236,47 @@ cd backend
 python -m pytest -q
 ```
 
-The tests cover API validation, GitHub parsing, RAG indexing/retrieval, rate limiting, and local sandbox execution across Python, JavaScript, TypeScript, and declaration files.
+Tests cover API validation, GitHub parsing, RAG indexing and retrieval, rate limiting, and local sandbox execution across supported languages. Docker-backed C and Java tests require the relevant images to be cached.
+
+Build the frontend:
+
+```powershell
+cd frontend
+npm install
+npm run build
+```
+
+## Deployment
+
+- **Docker Compose:** complete local deployment; recommended when C and Java Docker sandboxes are needed.
+- **Render:** configured by [`render.yaml`](render.yaml); add `GROQ_API_KEY` and restrict CORS before public deployment.
+- **Fly.io:** configured by [`fly.toml`](fly.toml); use `fly secrets set GROQ_API_KEY=...` rather than storing secrets in the file.
+- **Vercel:** configured by [`vercel.json`](vercel.json) for the Vite frontend; set `VITE_API_URL` when the backend is hosted elsewhere.
+
+Hosted platforms may not provide a Docker daemon. In that case, the backend uses local subprocess execution and C/Java require `gcc` or `clang`, plus `javac` and `java`, in the runtime image. The deployment manifests retain legacy `GROK_*` compatibility variables; use explicit `GROQ_*` variables for new deployments.
+
+## Known Limitations and Security Notes
+
+- Chroma data is in memory and is lost when the backend restarts.
+- Embeddings are deterministic hashed-token vectors, not semantic embeddings.
+- RAG uses Python AST and heuristic JavaScript/TypeScript symbol extraction, not a full compiler AST.
+- Sandbox verification covers one selected file and its tests; it is not a complete repository build or integration test.
+- Generated tests may reference dependencies unavailable in the isolated sandbox.
+- Groq TPM limits are enforced by Groq at the organization level. The application can report or retry boundedly, but cannot reset provider quota.
+- CORS defaults are intentionally permissive for a demo. Restrict `CORS_ORIGINS` in production.
+- Rotate any API key that has been exposed in a terminal, screenshot, chat, commit, or log. Do not put secrets in frontend code because Vite variables are shipped to browsers.
 
 ## Project Layout
 
 ```text
-backend/app/api/          FastAPI route handlers
-backend/app/services/     LLM, RAG, GitHub, static analysis, and sandbox logic
-backend/app/models/       Pydantic request/response schemas
-backend/tests/            Backend regression tests
-benchmarks/               Dataset, evaluation harness, and checked-in report
-frontend/src/             React application and review-mode components
+backend/app/api/        FastAPI route handlers
+backend/app/services/   LLM, RAG, GitHub, static analysis, and sandbox logic
+backend/app/models/     Pydantic request/response schemas
+backend/tests/          Backend regression tests
+benchmarks/             Dataset, evaluation harness, and report
+frontend/src/           React application and review-mode components
+docker-compose.yml      Local multi-container development
+render.yaml             Render backend deployment definition
+fly.toml                Fly.io backend deployment definition
+vercel.json             Vercel frontend build and rewrite configuration
 ```

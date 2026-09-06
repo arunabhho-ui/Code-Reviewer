@@ -28,6 +28,9 @@ def test_detect_language():
     assert detect_language_from_path("src/app/main.py") == "python"
     assert detect_language_from_path("frontend/src/App.jsx") == "javascript"
     assert detect_language_from_path("backend/types.ts") == "typescript"
+    assert detect_language_from_path("native/buffer.c") == "c"
+    assert detect_language_from_path("native/buffer.h") == "c"
+    assert detect_language_from_path("src/FileProcessor.java") == "java"
     assert detect_language_from_path("README.md") is None
 
 
